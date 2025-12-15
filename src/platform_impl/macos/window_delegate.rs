@@ -170,6 +170,12 @@ declare_class!(
         #[method(windowWillStartLiveResize:)]
         fn window_will_start_live_resize(&self, _: Option<&AnyObject>) {
             trace_scope!("windowWillStartLiveResize:");
+            let frame = self.window().frame();
+            let scale = self.scale_factor();
+            eprintln!(
+                "[winit macOS] windowWillStartLiveResize: frame ({}, {}) {}x{} scale={}",
+                frame.origin.x, frame.origin.y, frame.size.width, frame.size.height, scale
+            );
 
             let increments = self.ivars().resize_increments.get();
             self.set_resize_increments_inner(increments);
@@ -178,6 +184,12 @@ declare_class!(
         #[method(windowDidEndLiveResize:)]
         fn window_did_end_live_resize(&self, _: Option<&AnyObject>) {
             trace_scope!("windowDidEndLiveResize:");
+            let frame = self.window().frame();
+            let scale = self.scale_factor();
+            eprintln!(
+                "[winit macOS] windowDidEndLiveResize: frame ({}, {}) {}x{} scale={}",
+                frame.origin.x, frame.origin.y, frame.size.width, frame.size.height, scale
+            );
             self.set_resize_increments_inner(NSSize::new(1., 1.));
         }
 
@@ -185,6 +197,16 @@ declare_class!(
         #[method(windowDidMove:)]
         fn window_did_move(&self, _: Option<&AnyObject>) {
             trace_scope!("windowDidMove:");
+            let frame = self.window().frame();
+            let scale = self.scale_factor();
+            eprintln!(
+                "[winit macOS] windowDidMove: frame ({}, {}) {}x{} scale={}",
+                frame.origin.x,
+                frame.origin.y,
+                frame.size.width,
+                frame.size.height,
+                scale
+            );
             self.emit_move_event();
         }
 
@@ -192,7 +214,18 @@ declare_class!(
         fn window_did_change_backing_properties(&self, _: Option<&AnyObject>) {
             trace_scope!("windowDidChangeBackingProperties:");
             let scale_factor = self.scale_factor();
-            if scale_factor == self.ivars().previous_scale_factor.get() {
+            let previous = self.ivars().previous_scale_factor.get();
+            let frame = self.window().frame();
+            eprintln!(
+                "[winit macOS] windowDidChangeBackingProperties: scale {} -> {} at frame ({}, {}) {}x{}",
+                previous,
+                scale_factor,
+                frame.origin.x,
+                frame.origin.y,
+                frame.size.width,
+                frame.size.height
+            );
+            if scale_factor == previous {
                 return;
             };
             self.ivars().previous_scale_factor.set(scale_factor);
@@ -833,7 +866,12 @@ impl WindowDelegate {
         if physical_size != suggested_size {
             let logical_size = physical_size.to_logical(scale_factor);
             let size = NSSize::new(logical_size.width, logical_size.height);
+            eprintln!("[winit macOS] handle_scale_factor_changed: setContentSize({}, {}) because physical {:?} != suggested {:?}",
+                size.width, size.height, physical_size, suggested_size);
             window.setContentSize(size);
+        } else {
+            eprintln!("[winit macOS] handle_scale_factor_changed: NOT calling setContentSize, physical {:?} == suggested {:?}",
+                physical_size, suggested_size);
         }
         app_delegate.handle_window_event(window.id(), WindowEvent::Resized(physical_size));
     }
@@ -952,6 +990,7 @@ impl WindowDelegate {
     pub fn request_inner_size(&self, size: Size) -> Option<PhysicalSize<u32>> {
         let scale_factor = self.scale_factor();
         let size = size.to_logical(scale_factor);
+        eprintln!("[winit macOS] request_inner_size: setContentSize({}, {}) scale={}", size.width, size.height, scale_factor);
         self.window().setContentSize(NSSize::new(size.width, size.height));
         None
     }
@@ -972,6 +1011,7 @@ impl WindowDelegate {
         if current_size.height < min_size.height {
             current_size.height = min_size.height;
         }
+        eprintln!("[winit macOS] set_min_inner_size: setContentSize({}, {})", current_size.width, current_size.height);
         self.window().setContentSize(current_size);
     }
 
@@ -994,6 +1034,7 @@ impl WindowDelegate {
         if max_size.height < current_size.height {
             current_size.height = max_size.height;
         }
+        eprintln!("[winit macOS] set_max_inner_size: setContentSize({}, {})", current_size.width, current_size.height);
         self.window().setContentSize(current_size);
     }
 

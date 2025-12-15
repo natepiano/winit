@@ -195,7 +195,16 @@ declare_class!(
             // 1. When a new window is created as a tab, the frame size may change without a window resize occurring.
             // 2. Even when a window resize does occur on a new tabbed window, it contains the wrong size (includes tab height).
             let logical_size = LogicalSize::new(rect.size.width as f64, rect.size.height as f64);
-            let size = logical_size.to_physical::<u32>(self.scale_factor());
+            let scale = self.scale_factor();
+            let size = logical_size.to_physical::<u32>(scale);
+            eprintln!(
+                "[winit macOS] frameDidChange: logical {}x{} * scale {} = physical {}x{}",
+                rect.size.width,
+                rect.size.height,
+                scale,
+                size.width,
+                size.height
+            );
             self.queue_event(WindowEvent::Resized(size));
         }
 
