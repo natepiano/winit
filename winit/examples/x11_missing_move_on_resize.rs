@@ -11,6 +11,27 @@
 //! ## Workaround
 //!
 //! Query `window.outer_position()` after resize events.
+//!
+//! ## Root Cause
+//!
+//! In `winit-x11/src/event_processor.rs`, the `configure_notify` handler (around line 611-626)
+//! distinguishes between synthetic and real ConfigureNotify events:
+//!
+//! - **Synthetic** (via `XSendEvent`): Position is root-relative, `Moved` is emitted when changed
+//! - **Real**: Position is parent-relative, so `Moved` is skipped to avoid spurious events
+//!
+//! The problem is that keyboard snap/tile operations send **real** ConfigureNotify events,
+//! so `Moved` is never emitted even when the window actually moved.
+//!
+//! ## Suggested Fix
+//!
+//! For real ConfigureNotify events, instead of returning `moved = false`, query the actual
+//! root-relative position using `translate_coords_root()` (which `outer_position()` already
+//! uses internally), compare against the cached position, and emit `Moved` if it changed.
+//!
+//! The existing `inner_position_physical()` method in `window.rs:1522` correctly uses
+//! `XTranslateCoordinates` to get root-relative coordinates - this could be reused in the
+//! event handler for real ConfigureNotify events.
 
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
