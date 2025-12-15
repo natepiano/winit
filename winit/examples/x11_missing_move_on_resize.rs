@@ -1,7 +1,12 @@
 //! X11: Missing Moved event when WM moves+resizes window
 //!
-//! When a WM moves and resizes a window together (e.g., keyboard snap/tile),
-//! only SurfaceResized is emitted - Moved is missing even though position changed.
+//! On KDE Plasma (X11), when the window manager moves and resizes a window via keyboard
+//! shortcuts (Meta+Arrow snap/tile), winit emits `SurfaceResized` but not `Moved`, even
+//! though the window position changed.
+//!
+//! This may affect other X11 window managers that send real (non-synthetic) ConfigureNotify
+//! events for move+resize operations. Per ICCCM, WMs *should* send synthetic ConfigureNotify,
+//! but KDE appears to send real ones for keyboard snap operations.
 //!
 //! ## Reproduce
 //!
