@@ -218,17 +218,25 @@ impl XConnection {
         // when y is on the range [0, 2] and if the window has been unfocused since being
         // undecorated (or was undecorated upon construction), the first condition is true,
         // requiring us to rely on the second condition.
-        let nested = !(window == child || self.is_top_level(child, root) == Some(true));
+        let is_top_level = self.is_top_level(child, root);
+        let nested = !(window == child || is_top_level == Some(true));
+
+        eprintln!("[frame_extents_heuristic] window={window:?} child={child:?} is_top_level={is_top_level:?} nested={nested}");
 
         // Hopefully the WM supports EWMH, allowing us to get exact info on the window frames.
-        if let Some(mut frame_extents) = self.get_frame_extents(window) {
+        let raw_frame_extents = self.get_frame_extents(window);
+        eprintln!("[frame_extents_heuristic] raw _NET_FRAME_EXTENTS={raw_frame_extents:?}");
+
+        if let Some(mut frame_extents) = raw_frame_extents {
             // Mutter/Muffin/Budgie and Marco preserve their decorated frame extents when
             // decorations are disabled, but since the window becomes un-nested, it's easy to
             // catch.
             if !nested {
+                eprintln!("[frame_extents_heuristic] !nested -> zeroing frame_extents");
                 frame_extents = FrameExtents::new(0, 0, 0, 0);
             }
 
+            eprintln!("[frame_extents_heuristic] path=Supported frame_extents={frame_extents:?}");
             // The difference between the nested window's position and the outermost window's
             // position is equivalent to the frame size. In most scenarios, this is equivalent to
             // manually climbing the hierarchy as is done in the case below. Here's a list of
