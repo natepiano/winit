@@ -24,7 +24,7 @@ use objc2_foundation::{
     NSObjectNSDelayedPerforming, NSObjectNSKeyValueObserverRegistration, NSObjectProtocol, NSPoint,
     NSRect, NSSize, NSString,
 };
-use tracing::{trace, warn};
+use tracing::{debug, trace, warn};
 
 use super::app_state::ApplicationDelegate;
 use super::cursor::cursor_from_icon;
@@ -36,6 +36,7 @@ use super::{ffi, Fullscreen, MonitorHandle, OsError, WindowId};
 use crate::dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize, Position, Size};
 use crate::error::{ExternalError, NotSupportedError, OsError as RootOsError};
 use crate::event::{InnerSizeWriter, WindowEvent};
+use crate::monitor::{resolve_scale_factor, MonitorBounds};
 use crate::platform::macos::{OptionAsAlt, WindowExtMacOS};
 use crate::window::{
     Cursor, CursorGrabMode, Icon, ImePurpose, ResizeDirection, Theme, UserAttentionType,
@@ -932,12 +933,21 @@ impl WindowDelegate {
     }
 
     pub fn set_outer_position(&self, position: Position) {
-        let position = position.to_logical(self.scale_factor());
+        let old_scale = self.scale_factor();
+        let scale_factor = self.scale_factor_for(&position);
+        debug!(
+            "[winit set_outer_position] old_scale={old_scale}, resolved={scale_factor}, pos={position:?}"
+        );
+        let position = position.to_logical(scale_factor);
         let point = flip_window_screen_coordinates(NSRect::new(
             NSPoint::new(position.x, position.y),
             self.window().frame().size,
         ));
         unsafe { self.window().setFrameOrigin(point) };
+        debug!(
+            "[winit set_outer_position] after move: scale={}",
+            self.scale_factor()
+        );
     }
 
     #[inline]
@@ -957,7 +967,14 @@ impl WindowDelegate {
     #[inline]
     pub fn request_inner_size(&self, size: Size) -> Option<PhysicalSize<u32>> {
         let scale_factor = self.scale_factor();
+        debug!(
+            "[winit request_inner_size] scale={scale_factor}, input={size:?}"
+        );
         let size = size.to_logical(scale_factor);
+        debug!(
+            "[winit request_inner_size] logical={}x{}",
+            size.width, size.height
+        );
         self.window().setContentSize(NSSize::new(size.width, size.height));
         None
     }
@@ -1146,6 +1163,16 @@ impl WindowDelegate {
     #[inline]
     pub fn scale_factor(&self) -> f64 {
         self.window().backingScaleFactor() as _
+    }
+
+    /// Determine the correct scale factor for a target position by checking
+    /// which monitor contains it. Falls back to the current window's scale factor.
+    fn scale_factor_for(&self, position: &Position) -> f64 {
+        let bounds: Vec<_> = monitor::available_monitors()
+            .iter()
+            .map(|m| MonitorBounds::from_physical(m.position(), m.size(), m.scale_factor()))
+            .collect();
+        resolve_scale_factor(position, &bounds).unwrap_or_else(|| self.scale_factor())
     }
 
     #[inline]

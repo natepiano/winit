@@ -17,6 +17,7 @@ use crate::dpi::{PhysicalPosition, PhysicalSize, Position, Size};
 use crate::error::{ExternalError, NotSupportedError, OsError as RootOsError};
 use crate::event::{Event, InnerSizeWriter, WindowEvent};
 use crate::event_loop::AsyncRequestSerial;
+use crate::monitor::{resolve_scale_factor, MonitorBounds};
 use crate::platform::x11::WindowType;
 use crate::platform_impl::x11::atoms::*;
 use crate::platform_impl::x11::{
@@ -1235,7 +1236,8 @@ impl UnownedWindow {
 
     #[inline]
     pub fn set_outer_position(&self, position: Position) {
-        let (x, y) = position.to_physical::<i32>(self.scale_factor()).into();
+        let scale_factor = self.scale_factor_for(&position);
+        let (x, y) = position.to_physical::<i32>(scale_factor).into();
         self.set_position_physical(x, y);
     }
 
@@ -1597,6 +1599,19 @@ impl UnownedWindow {
     #[inline]
     pub fn scale_factor(&self) -> f64 {
         self.shared_state_lock().last_monitor.scale_factor
+    }
+
+    /// Determine the correct scale factor for a target position by checking
+    /// which monitor contains it. Falls back to the current window's scale factor.
+    fn scale_factor_for(&self, position: &Position) -> f64 {
+        let bounds: Vec<_> = self
+            .xconn
+            .available_monitors()
+            .unwrap_or_default()
+            .iter()
+            .map(|m| MonitorBounds::from_physical(m.position(), m.size(), m.scale_factor()))
+            .collect();
+        resolve_scale_factor(position, &bounds).unwrap_or(self.scale_factor())
     }
 
     pub fn set_cursor_position_physical(&self, x: i32, y: i32) -> Result<(), ExternalError> {
